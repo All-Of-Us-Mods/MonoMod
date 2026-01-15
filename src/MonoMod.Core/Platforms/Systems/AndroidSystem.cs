@@ -94,7 +94,7 @@ namespace MonoMod.Core.Platforms.Systems
             // TODO: should this be thread-safe? It definitely is not right now.
 
             // Update the protection of this
-            /*if (patchKind == PatchTargetKind.Executable)
+            if (patchKind == PatchTargetKind.Executable)
             {
                 // TODO: Android API level 29+ enforces R^X, change in the future.
                 ProtectRWX(patchTarget, data.Length);
@@ -102,7 +102,7 @@ namespace MonoMod.Core.Platforms.Systems
             else
             {
                 ProtectRW(patchTarget, data.Length);
-            }*/
+            }
 
             var target = new Span<byte>((void*)patchTarget, data.Length);
             // now we copy target to backup, then data to target, then flush the instruction cache
@@ -377,7 +377,7 @@ namespace MonoMod.Core.Platforms.Systems
         }
 
         private PosixExceptionHelper? lazyNativeExceptionHelper;
-        public INativeExceptionHelper? NativeExceptionHelper => lazyNativeExceptionHelper ??= CreateNativeExceptionHelper();
+        public INativeExceptionHelper? NativeExceptionHelper => lazyNativeExceptionHelper; // ??= CreateNativeExceptionHelper();
 
         private static ReadOnlySpan<byte> NEHTempl => "/mm-exhelper.so.XXXXXX"u8;
 
