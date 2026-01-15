@@ -41,34 +41,13 @@ namespace MonoMod.Core.Interop
 
         [DllImport(LibC, CallingConvention = CallingConvention.Cdecl, EntryPoint = "__errno_location")]
         public static extern unsafe int* __errno_location();
-
-        [DllImport(LibC, CallingConvention = CallingConvention.Cdecl, EntryPoint = "__errno")]
-        public static extern unsafe int* __errno();
-
+        
         public static unsafe int Errno => *__errno_location();
-
-        public static unsafe int ErrnoAlt => *__errno();
 
         static Unix()
         {
             // Preload pinvoke initialization so it doesn't affect errno when accessed the first time
-            try
-            {
-                _ = Errno;
-            }
-            catch (EntryPointNotFoundException)
-            {
-                // Ignore because some platforms may not have __errno_location
-            }
-
-            try
-            {
-                _ = ErrnoAlt;
-            }
-            catch (EntryPointNotFoundException)
-            {
-                // Ignore because some platforms may not have __errno
-            }
+            _ = Errno;
         }
 
         [Flags]

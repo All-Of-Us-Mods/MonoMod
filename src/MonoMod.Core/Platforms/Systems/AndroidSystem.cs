@@ -34,7 +34,7 @@ namespace MonoMod.Core.Platforms.Systems
 
         public AndroidSystem()
         {
-            PageSize = (nint)Unix.Sysconf(Unix.SysconfName.PageSize);
+            PageSize = (nint)Android.Sysconf(Android.SysconfName.PageSize);
             allocator = new MmapPagedMemoryAllocator(PageSize);
 
             Switches.SetSwitchValue(Switches.HelperDropPath, Path.GetTempPath());
@@ -120,18 +120,18 @@ namespace MonoMod.Core.Platforms.Systems
         private void ProtectRW(IntPtr addr, nint size)
         {
             RoundToPageBoundary(ref addr, ref size);
-            if (Unix.Mprotect(addr, (nuint)size, Unix.Protection.Read | Unix.Protection.Write) != 0)
+            if (Android.Mprotect(addr, (nuint)size, Android.Protection.Read | Android.Protection.Write) != 0)
             {
-                throw new Win32Exception(Unix.ErrnoAlt);
+                throw new Win32Exception(Android.Errno);
             }
         }
 
         private void ProtectRWX(IntPtr addr, nint size)
         {
             RoundToPageBoundary(ref addr, ref size);
-            if (Unix.Mprotect(addr, (nuint)size, Unix.Protection.Read | Unix.Protection.Write | Unix.Protection.Execute) != 0)
+            if (Android.Mprotect(addr, (nuint)size, Android.Protection.Read | Android.Protection.Write | Android.Protection.Execute) != 0)
             {
-                throw new Win32Exception(Unix.ErrnoAlt);
+                throw new Win32Exception(Android.Errno);
             }
         }
 
@@ -158,9 +158,9 @@ namespace MonoMod.Core.Platforms.Systems
                 // Open a temporary pipe for page probes
                 // This pipe gets leaked, but eh
                 var pipefd = stackalloc int[2];
-                if (Unix.Pipe2(pipefd, Unix.PipeFlags.CloseOnExec) == -1)
+                if (Android.Pipe2(pipefd, Android.PipeFlags.CloseOnExec) == -1)
                 {
-                    throw new Win32Exception(Unix.ErrnoAlt, "Failed to create pipe for page probes");
+                    throw new Win32Exception(Android.Errno, "Failed to create pipe for page probes");
                 }
 
                 PageProbePipeReadFD = pipefd[0];
@@ -170,10 +170,9 @@ namespace MonoMod.Core.Platforms.Systems
             public static unsafe bool PageAllocated(nint page)
             {
                 byte garbage;
-                // TODO: Mincore isn't implemented in WSL, and always gives ENOSYS
-                if (Unix.Mincore(page, 1, &garbage) == -1)
+                if (Android.Mincore(page, 1, &garbage) == -1)
                 {
-                    var lastError = Unix.ErrnoAlt;
+                    var lastError = Android.Errno;
                     if (lastError == 12)
                     {  // ENOMEM, page is unallocated
                         return false;
@@ -191,9 +190,9 @@ namespace MonoMod.Core.Platforms.Systems
             public static unsafe bool PageReadable(nint page)
             {
                 // Try to write into a pipe using the page as the source buffer
-                if (Unix.Write(PageProbePipeWriteFD, page, 1) == -1)
+                if (Android.Write(PageProbePipeWriteFD, page, 1) == -1)
                 {
-                    var lastError = Unix.ErrnoAlt;
+                    var lastError = Android.Errno;
                     if (lastError == 14)
                     {  // EFAULT, buf is not readable
                         return false;
@@ -203,7 +202,7 @@ namespace MonoMod.Core.Platforms.Systems
 
                 // Success - clean up the pipe
                 byte garbage;
-                if (Unix.Read(PageProbePipeReadFD, new IntPtr(&garbage), 1) == -1)
+                if (Android.Read(PageProbePipeReadFD, new IntPtr(&garbage), 1) == -1)
                 {
                     throw new Win32Exception("Failed to clean up page probe pipe after successful page probe");
                 }
@@ -215,15 +214,15 @@ namespace MonoMod.Core.Platforms.Systems
 
             protected override bool TryAllocateNewPage(AllocationRequest request, [MaybeNullWhen(false)] out IAllocatedMemory allocated)
             {
-                var prot = request.Executable ? Unix.Protection.Execute : Unix.Protection.None;
-                prot |= Unix.Protection.Read | Unix.Protection.Write;
+                var prot = request.Executable ? Android.Protection.Execute : Android.Protection.None;
+                prot |= Android.Protection.Read | Android.Protection.Write;
 
                 // mmap the page we found
-                var mmapPtr = Unix.Mmap(IntPtr.Zero, (nuint)PageSize, prot, Unix.MmapFlags.Private | Unix.MmapFlags.Anonymous, -1, 0);
+                var mmapPtr = Android.Mmap(IntPtr.Zero, (nuint)PageSize, prot, Android.MmapFlags.Private | Android.MmapFlags.Anonymous, -1, 0);
                 if (mmapPtr is 0 or -1)
                 {
                     // fuck
-                    var errno = Unix.ErrnoAlt;
+                    var errno = Android.Errno;
                     MMDbgLog.Error($"Error creating allocation: {errno} {new Win32Exception(errno).Message}");
                     allocated = null;
                     return false;
@@ -259,8 +258,8 @@ namespace MonoMod.Core.Platforms.Systems
                     return false;
                 }
 
-                var prot = request.Base.Executable ? Unix.Protection.Execute : Unix.Protection.None;
-                prot |= Unix.Protection.Read | Unix.Protection.Write;
+                var prot = request.Base.Executable ? Android.Protection.Execute : Android.Protection.None;
+                prot |= Android.Protection.Read | Android.Protection.Write;
 
                 // number of pages needed to satisfy length requirements
                 var numPages = request.Base.Size / PageSize + 1;
@@ -324,7 +323,7 @@ namespace MonoMod.Core.Platforms.Systems
                 }
 
                 // mmap the page we found
-                var mmapPtr = Unix.Mmap(ptr, (nuint)PageSize, prot, Unix.MmapFlags.Private | Unix.MmapFlags.Anonymous | Unix.MmapFlags.FixedNoReplace, -1, 0);
+                var mmapPtr = Android.Mmap(ptr, (nuint)PageSize, prot, Android.MmapFlags.Private | Android.MmapFlags.Anonymous | Android.MmapFlags.FixedNoReplace, -1, 0);
                 if (mmapPtr is 0 or -1)
                 {
                     // fuck
@@ -360,10 +359,10 @@ namespace MonoMod.Core.Platforms.Systems
 
             protected override bool TryFreePage(Page page, [NotNullWhen(false)] out string? errorMsg)
             {
-                var res = Unix.Munmap(page.BaseAddr, page.Size);
+                var res = Android.Munmap(page.BaseAddr, page.Size);
                 if (res != 0)
                 {
-                    errorMsg = new Win32Exception(Unix.ErrnoAlt).Message;
+                    errorMsg = new Win32Exception(Android.Errno).Message;
                     return false;
                 }
                 errorMsg = null;
@@ -380,7 +379,7 @@ namespace MonoMod.Core.Platforms.Systems
         private PosixExceptionHelper? lazyNativeExceptionHelper;
         public INativeExceptionHelper? NativeExceptionHelper => lazyNativeExceptionHelper ??= CreateNativeExceptionHelper();
 
-        private static ReadOnlySpan<byte> NEHTempl => "/tmp/mm-exhelper.so.XXXXXX"u8;
+        private static ReadOnlySpan<byte> NEHTempl => "/mm-exhelper.so.XXXXXX"u8;
 
         private sealed class AndroidNativeLibDrop : PosixNativeLibraryDrop
         {
@@ -388,18 +387,18 @@ namespace MonoMod.Core.Platforms.Systems
 
             protected override void CloseFileDescriptor(nint fd)
             {
-                _ = Unix.Close((int)fd);
+                _ = Android.Close((int)fd);
             }
 
             protected override unsafe nint Mkstemp(Span<byte> template)
             {
                 int fd;
                 fixed (byte* pTmpl = template)
-                    fd = Unix.MkSTemp(pTmpl);
+                    fd = Android.MkSTemp(pTmpl);
 
                 if (fd == -1)
                 {
-                    var lastError = Unix.ErrnoAlt;
+                    var lastError = Android.Errno;
                     var ex = new Win32Exception(lastError);
                     MMDbgLog.Error($"Could not create temp file: {lastError} {ex}");
                     throw ex;
