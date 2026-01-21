@@ -93,11 +93,10 @@ namespace MonoMod.Core.Platforms.Systems
         {
             // TODO: should this be thread-safe? It definitely is not right now.
 
-            // Update the protection of this
+            // On Android, we should respect W^X since it is enforced in newer API levels.
             if (patchKind == PatchTargetKind.Executable)
             {
-                // TODO: Android API level 29+ enforces R^X, change in the future.
-                ProtectRWX(patchTarget, data.Length);
+                ProtectRX(patchTarget, data.Length);
             }
             else
             {
@@ -126,10 +125,10 @@ namespace MonoMod.Core.Platforms.Systems
             }
         }
 
-        private void ProtectRWX(IntPtr addr, nint size)
+        private void ProtectRX(IntPtr addr, nint size)
         {
             RoundToPageBoundary(ref addr, ref size);
-            if (Android.Mprotect(addr, (nuint)size, Android.Protection.Read | Android.Protection.Write | Android.Protection.Execute) != 0)
+            if (Android.Mprotect(addr, (nuint)size, Android.Protection.Read | Android.Protection.Execute) != 0)
             {
                 throw new Win32Exception(Android.Errno);
             }
