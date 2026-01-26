@@ -94,19 +94,17 @@ namespace MonoMod.Core.Platforms.Systems
             // TODO: should this be thread-safe? It definitely is not right now.
 
             // On Android, we should respect W^X since it is enforced in newer API levels.
-            if (patchKind == PatchTargetKind.Executable)
-            {
-                ProtectRX(patchTarget, data.Length);
-            }
-            else
-            {
-                ProtectRW(patchTarget, data.Length);
-            }
+            ProtectRW(patchTarget, data.Length);
 
             var target = new Span<byte>((void*)patchTarget, data.Length);
             // now we copy target to backup, then data to target, then flush the instruction cache
             _ = target.TryCopyTo(backup);
             data.CopyTo(target);
+
+            if (patchKind == PatchTargetKind.Executable)
+            {
+                ProtectRX(patchTarget, data.Length);
+            }
         }
 
         private void RoundToPageBoundary(ref nint addr, ref nint size)
