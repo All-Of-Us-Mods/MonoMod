@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using static MonoMod.Core.Interop.Windows;
 
@@ -65,6 +66,20 @@ namespace MonoMod.Core.Platforms.Systems
                     ClassifyX86,
                     ReturnsReturnBuffer: true);
             }
+            else if (PlatformDetection.Architecture is ArchitectureKind.Arm64)
+            {
+                // note: this is just a copy of the SysV Arm64 ABI
+                DefaultAbi = new Abi(
+                    new[]
+                    {
+                        //SpecialArgumentKind.ReturnBuffer, // ARM64 passes the return buffer in a dedicated register
+                        SpecialArgumentKind.ThisPointer,
+                        SpecialArgumentKind.UserArguments
+                    },
+                    SystemVABI.ClassifyARM64,
+                    false
+                );
+            }
         }
 
         // if the provided backup isn't large enough, the data isn't backed up
@@ -120,9 +135,37 @@ namespace MonoMod.Core.Platforms.Systems
             }
         }
 
+        private static readonly MethodInfo? GetModulesInternalMethod =
+            typeof(Process).GetMethod("GetModules_internal", BindingFlags.NonPublic | BindingFlags.Instance, null, [typeof(IntPtr)], null);
+
+        public IEnumerable<LoadedModule> EnumerateLoadedModules()
+        {
+            var process = Process.GetCurrentProcess();
+
+            IEnumerable<ProcessModule> modules;
+
+            if (GetModulesInternalMethod == null)
+            {
+                modules = process.Modules.Cast<ProcessModule>();
+            }
+            else
+            {
+                // On ancient Mono versions (Unity =<5.2), Process.get_Modules crashes with a covariant array interface bug
+                modules = ((object[])GetModulesInternalMethod.Invoke(process, [process.Handle])!).Cast<ProcessModule>();
+            }
+
+            foreach (var module in modules)
+            {
+                yield return new LoadedModule((ulong)module.BaseAddress, module.FileName, (ulong)module.ModuleMemorySize);
+            }
+        }
+
         public IEnumerable<string?> EnumerateLoadedModuleFiles()
         {
-            return Process.GetCurrentProcess().Modules.Cast<ProcessModule>().Select(m => m.FileName)!;
+            foreach (var module in EnumerateLoadedModules())
+            {
+                yield return module.FileName;
+            }
         }
 
         public unsafe nint GetSizeOfReadableMemory(nint start, nint guess)
