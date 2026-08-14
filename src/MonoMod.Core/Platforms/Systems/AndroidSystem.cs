@@ -5,10 +5,8 @@ using MonoMod.Utils;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 
 namespace MonoMod.Core.Platforms.Systems
@@ -22,9 +20,20 @@ namespace MonoMod.Core.Platforms.Systems
         private readonly Abi defaultAbi;
         public Abi? DefaultAbi => defaultAbi;
 
+        public IEnumerable<LoadedModule> EnumerateLoadedModules()
+        {
+            foreach (var module in Linux.Procfs.ParseMapsModules(Linux.Procfs.ProcPid.Self)!)
+            {
+                yield return new LoadedModule(module.StartAddress, module.Path, module.Size);
+            }
+        }
+
         public IEnumerable<string?> EnumerateLoadedModuleFiles()
         {
-            return Process.GetCurrentProcess().Modules.Cast<ProcessModule>().Select(m => m.FileName)!;
+            foreach (var module in EnumerateLoadedModules())
+            {
+                yield return module.FileName;
+            }
         }
 
         private readonly nint PageSize;
